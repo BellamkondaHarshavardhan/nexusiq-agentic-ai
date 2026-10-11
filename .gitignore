@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Secrets & local state
+.env
+
+# Generated at runtime (re-created by `python -m nexusiq.cli init`)
+data/company.db
+data/chroma/
+evaluation/reports/*.json
+evaluation/reports/*.md
+
+# Editors / OS
+.idea/
+.DS_Store
+.chainlit/
+chainlit.md

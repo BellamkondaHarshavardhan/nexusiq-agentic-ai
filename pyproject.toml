@@ -1,0 +1,10 @@
+[project]
+name = "nexusiq"
+version = "1.0.0"
+description = "NexusIQ - Enterprise multi-agent AI copilot (LangGraph, RAG, SQL agent, MCP, Azure OpenAI)"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"

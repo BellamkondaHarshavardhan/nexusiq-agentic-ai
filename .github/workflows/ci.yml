@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Unit and integration tests (offline demo model, no API keys)
+        run: pytest
+      - name: Evaluation harness (golden set)
+        run: python evaluation/run_eval.py --min-pass 0.9
+      - name: Upload evaluation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report-${{ matrix.python-version }}
+          path: evaluation/reports/

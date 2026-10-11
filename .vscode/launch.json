@@ -1,0 +1,35 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "NexusIQ: Streamlit app",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "streamlit",
+      "args": ["run", "app/streamlit_app.py"],
+      "justMyCode": true
+    },
+    {
+      "name": "NexusIQ: CLI chat",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "nexusiq.cli",
+      "args": ["chat", "--role", "employee"],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "NexusIQ: Evaluation",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/evaluation/run_eval.py",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "NexusIQ: MCP client demo",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/mcp_client_demo.py",
+      "console": "integratedTerminal"
+    }
+  ]
+}

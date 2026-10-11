@@ -1,0 +1,3 @@
+# Optional: only needed if you want the Chainlit chat UI (app/chainlit_app.py)
+-r requirements.txt
+chainlit>=2.0

@@ -1,0 +1,18 @@
+# --- Core agentic AI stack ---
+langchain>=1.0,<2
+langchain-core>=1.0,<2
+langchain-openai>=1.0,<2          # OpenAI + Azure OpenAI chat & embeddings
+langchain-chroma>=1.0,<2
+langchain-text-splitters>=1.0,<2
+langgraph>=1.0,<2                 # multi-agent workflow orchestration
+chromadb>=1.0,<2                  # vector database
+mcp>=1.9,<3                       # Model Context Protocol (server + client)
+
+# --- App / utilities ---
+streamlit>=1.50,<2
+sqlglot>=25                       # SQL parsing for the read-only safety validator
+pydantic>=2.5
+python-dotenv>=1.0
+pypdf>=5.0                        # PDF ingestion
+pandas>=2.2
+tzdata                            # timezone data (needed on Windows)
