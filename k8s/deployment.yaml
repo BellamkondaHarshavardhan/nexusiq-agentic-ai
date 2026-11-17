@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nexusiq
+  namespace: nexusiq
+  labels:
+    app: nexusiq
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nexusiq
+  template:
+    metadata:
+      labels:
+        app: nexusiq
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: nexusiq
+          image: nexusiq:1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8501
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: nexusiq-config
+            - secretRef:
+                name: nexusiq-secrets
+                optional: true
+          volumeMounts:
+            - name: app-data
+              mountPath: /app/data/runtime
+            - name: tmp
+              mountPath: /tmp
+          startupProbe:
+            httpGet:
+              path: /_stcore/health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /_stcore/health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /_stcore/health
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 500m
+              memory: 768Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: app-data
+          persistentVolumeClaim:
+            claimName: nexusiq-data
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi

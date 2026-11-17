@@ -177,11 +177,204 @@ python evaluation/run_eval.py             # golden-set evaluation → evaluation
 ```
 The evaluation harness (18 golden questions) measures **routing accuracy, answer-fact checks, SQL success rate, guardrail pass-rate and latency**. Re-run it with a real LLM configured to get real-model numbers for your README / CV.
 
-### Docker
-```bash
-docker build -t nexusiq .
-docker run -p 8501:8501 --env-file .env nexusiq
+## Containerization and Kubernetes
+
+The Streamlit app is the container entry point. On startup it creates the synthetic SQLite database and indexes the bundled knowledge-base documents if needed. The database and ChromaDB files use `NEXUSIQ_DATA_DIR`; the sample documents stay in the image. Docker Compose and Kubernetes mount persistent storage at the runtime data directory so those generated files survive container replacement.
+
+The container serves the main Streamlit UI. The existing Chainlit UI and MCP stdio server remain available through their documented local commands; this web container does not expose an MCP network endpoint.
+
+```mermaid
+flowchart LR
+    Browser -->|HTTP :8501| Service[Kubernetes Service]
+    Service --> Pod[Streamlit Pod / NexusIQ LangGraph]
+    Pod -->|SQLite + Chroma files| PVC[(Persistent volume)]
+    Pod --> Config[ConfigMap: non-secret settings]
+    Pod --> Secret[Secret: optional provider keys]
+    Pod -->|optional API calls| LLM[Azure OpenAI / OpenAI]
+    Pod -->|optional traces| LS[LangSmith]
+    Pod -->|stdout / stderr| Logs[Container logs]
 ```
+
+### Install Docker on Windows
+
+1. Install **Docker Desktop for Windows** from the official Docker website.
+2. Enable the **WSL 2 backend** during setup, start Docker Desktop, and wait until it reports that Docker is running.
+3. In a new PowerShell terminal, verify the installation:
+
+   ```powershell
+   docker --version
+   docker compose version
+   ```
+
+Open PowerShell in the repository root (`agentic ai project`). The following examples use PowerShell commands and paths.
+
+### Build and run with Docker
+
+Create a local environment file. It is ignored by Git and must not contain credentials you plan to commit:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Leave the keys blank for offline demo mode, or fill in the Azure OpenAI/OpenAI settings described in `.env.example`. The Docker image does not copy `.env` or bake credentials into build layers. The first app startup initializes the demo SQLite database and vector index in the mounted data volume.
+
+Build the image:
+
+```powershell
+docker build -t nexusiq:1.0 .
+```
+
+Run it with persistent runtime data:
+
+```powershell
+docker run -d --name nexusiq -p 8501:8501 --env-file .env -v nexusiq-data:/app/data/runtime nexusiq:1.0
+```
+
+Open <http://localhost:8501>. Useful container commands:
+
+```powershell
+docker logs nexusiq
+docker ps
+docker stop nexusiq
+```
+
+The requested basic run command also works, but without the named volume, generated data is lost when the container is removed:
+
+```powershell
+docker run -d --name nexusiq -p 8501:8501 --env-file .env nexusiq:1.0
+```
+
+The image runs as a non-root user, exposes port `8501`, and reports health through Streamlit's `/_stcore/health` endpoint. Logs go to standard output/error, so use `docker logs` to read them.
+
+### Run with Docker Compose
+
+Compose reads the same `.env` file and stores the generated database and Chroma index in a named volume:
+
+```powershell
+docker compose up --build -d
+docker compose ps
+docker compose logs -f
+docker compose down
+```
+
+`docker compose down` keeps the named data volume. Avoid `docker compose down -v` unless you intentionally want to delete the database and vector index.
+
+### Deploy a public demo with Render and connect your domain
+
+The included `render.yaml` deploys the Docker app in offline demo mode, so a public demo does not use a paid model API key by default. The free instance has ephemeral storage and may sleep when idle; generated data and uploaded documents can be lost when it restarts or redeploys. Use a paid service with persistent storage if that data must survive.
+
+1. Push this repository to GitHub.
+2. Sign in to Render, choose **New → Blueprint**, and connect the repository containing `render.yaml`. Review the service settings and create it.
+3. Wait for the first deploy to finish, then open the `onrender.com` URL shown on the service page.
+4. In the service's **Settings → Custom Domains**, add a subdomain you own, such as `app.example.com`. At your domain registrar/DNS provider, add the DNS record Render displays for that hostname. Wait for DNS verification and Render's HTTPS certificate, then use the custom URL.
+
+This is an open demo: anyone with the URL can use it, choose the demo HR role, and submit documents to the shared instance. Use only synthetic/public information; do not add real credentials or confidential documents. Do not add an LLM API key to this unauthenticated service, since visitors could generate billable requests. Add authentication and rate limiting before connecting a paid model or using private data.
+
+### Kubernetes on Docker Desktop or Minikube
+
+Start a local Kubernetes cluster:
+
+- **Docker Desktop:** open Docker Desktop settings, enable Kubernetes, and wait until the cluster is ready.
+- **Minikube:** install Minikube and `kubectl`, then run `minikube start`.
+
+Build `nexusiq:1.0` as above. Docker Desktop Kubernetes can use the local Docker image. With Minikube, load it into the cluster:
+
+```powershell
+minikube image load nexusiq:1.0
+```
+
+For offline demo mode, you do not need to create a Kubernetes Secret. To configure real provider credentials, copy the template, edit it locally, and apply it. `k8s/secret.yaml` is Git-ignored; never commit populated credentials:
+
+```powershell
+Copy-Item k8s/secret.yaml.example k8s/secret.yaml
+# Edit k8s/secret.yaml and enter only the provider keys/deployments you use.
+kubectl apply -f k8s/secret.yaml
+```
+
+Create the namespace first, then apply the application manifests:
+
+```powershell
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/
+kubectl get pods -n nexusiq
+kubectl get deployments -n nexusiq
+kubectl get services -n nexusiq
+```
+
+The manifests create a single-replica Deployment, an internal Service, non-secret ConfigMap settings, a 5 GiB persistent-volume claim, health probes, and resource requests/limits. The local cluster must provide a default StorageClass for the PVC. Open the app with port forwarding:
+
+```powershell
+kubectl port-forward service/nexusiq 8501:80 -n nexusiq
+```
+
+Then browse to <http://localhost:8501>. To inspect the running pod and its logs:
+
+```powershell
+kubectl describe pods -n nexusiq
+kubectl logs deployment/nexusiq -n nexusiq
+```
+
+### Scaling and recovery
+
+The Deployment maintains its desired replica count. If a container exits or fails its liveness probe, Kubernetes restarts it; readiness probes keep unready pods out of Service traffic. To change the replica count, the command syntax is:
+
+```powershell
+kubectl scale deployment nexusiq --replicas=3 -n nexusiq
+```
+
+**Keep this project at one replica for normal use.** Scaling the web process does not make SQLite, ChromaDB, or the in-memory LangGraph conversation checkpointer shared or safe for concurrent access. The PVC is `ReadWriteOnce`, which can also prevent pods on different nodes from mounting it. Before using multiple replicas, migrate state to services designed for shared access (for example, a managed database, shared vector store, and persistent/distributed checkpointer), then add appropriate session routing and verify concurrent writes.
+
+### Troubleshooting
+
+| Symptom | What to check |
+|---|---|
+| Docker says it cannot connect to the engine | Start Docker Desktop and wait for it to finish starting. |
+| Port `8501` is already in use | Stop the other app/container or map a different host port, e.g. `-p 8502:8501`. |
+| Container is unhealthy during first startup | Check `docker logs nexusiq`; first-time document indexing may take longer, especially with online embeddings. |
+| Kubernetes shows `ImagePullBackOff` | Ensure the local image is available to the cluster; for Minikube run `minikube image load nexusiq:1.0`. |
+| PVC remains `Pending` | Check `kubectl get storageclass` and the local cluster's storage provisioner. |
+| Kubernetes reports permission errors on the data volume | Check that the volume driver honors `fsGroup`; use a local cluster's default StorageClass or adjust its supported volume permissions. |
+| App uses offline mode unexpectedly | Check provider environment variable names and credentials; then recreate/restart the container or pod so it receives the updated environment. |
+
+### Security recommendations
+
+- Never put credentials in the Dockerfile, image build arguments, source control, or screenshots. `.env` and `k8s/secret.yaml` are excluded from Git and the Docker build context.
+- For Kubernetes, use a Secret for API keys. Kubernetes Secret values are not automatically encrypted in etcd; enable encryption at rest and prefer a managed secret store for shared/production clusters.
+- Use a scoped, revocable API token. Do not expose the Streamlit service publicly without real user authentication and TLS.
+- This project’s role selector is a demo control, not authentication. Do not use it as an authorization boundary in a public deployment.
+- The Compose setup uses a read-only container filesystem, a non-root user, dropped Linux capabilities, and bounded log files.
+
+### GitHub Actions: build and publish to Docker Hub
+
+`.github/workflows/docker-build.yml` runs `pytest` and builds the image on pushes to `main` and pull requests. To publish from pushes to `main`:
+
+1. Create a Docker Hub access token with the minimum permissions needed to push.
+2. In GitHub, open **Settings → Secrets and variables → Actions → New repository secret**.
+3. Add `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`.
+4. Push to `main` and review the **Actions** run. Without both secrets, tests and the image build still run, but no image is pushed.
+
+For a manual Docker Hub push:
+
+```powershell
+docker login --username YOUR_DOCKERHUB_USERNAME
+docker tag nexusiq:1.0 YOUR_DOCKERHUB_USERNAME/nexusiq-agentic-ai:1.0
+docker push YOUR_DOCKERHUB_USERNAME/nexusiq-agentic-ai:1.0
+```
+
+Docker prompts for the access token; do not put it directly in a command or commit it. The GitHub workflow publishes `latest` and a commit-SHA tag when configured.
+
+### Screenshots
+
+Screenshot placeholders for a future project demo:
+
+- Streamlit chat with citations and agent trace: `docs/screenshots/streamlit-rag-demo.png`
+- SQL result and role-based access example: `docs/screenshots/sql-access-control-demo.png`
+
+### Future DevOps improvements
+
+- Use managed relational/vector storage and a persistent LangGraph checkpointer before enabling multiple replicas.
+- Add authentication, TLS ingress, and managed secret delivery before public exposure.
+- Add image vulnerability scanning, software bill of materials (SBOM), and release tags to CI/CD.
 
 ### Deploy to Azure (outline)
 Push the image to Azure Container Registry and run it on **Azure Container Apps** (or App Service for Containers), passing the Azure OpenAI settings as secrets/environment variables, e.g. `az containerapp up --name nexusiq --source . --ingress external --target-port 8501`. In production, swap the demo SQLite database for Azure SQL / PostgreSQL and the in-memory checkpointer for a persistent one.
@@ -224,7 +417,7 @@ agentic ai project/
 ├── tests/                      # 79 pytest tests
 ├── scripts/                    # MCP client demo + MCP launcher
 ├── docs/CV_AND_INTERVIEW_GUIDE.md
-├── Dockerfile · .github/workflows/ci.yml · requirements*.txt · .env.example
+├── Dockerfile · docker-compose.yml · k8s/ · .github/workflows/ · requirements*.txt · .env.example
 ```
 
 ---

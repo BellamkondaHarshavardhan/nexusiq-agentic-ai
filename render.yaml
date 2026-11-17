@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: nexusiq
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /_stcore/health
+    envVars:
+      - key: LLM_PROVIDER
+        value: offline
+      - key: EMBEDDING_PROVIDER
+        value: offline
+      - key: NEXUSIQ_DATA_DIR
+        value: /app/data/runtime

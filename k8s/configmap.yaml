@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nexusiq-config
+  namespace: nexusiq
+data:
+  LLM_PROVIDER: "auto"
+  EMBEDDING_PROVIDER: "auto"
+  NEXUSIQ_DATA_DIR: "/app/data/runtime"
+  LLM_TEMPERATURE: "0"
+  RETRIEVAL_TOP_K: "4"
+  SQL_MAX_ROWS: "50"
+  SQL_MAX_RETRIES: "2"
+  CRITIC_MAX_RETRIES: "1"
+  LANGSMITH_TRACING: "false"
+  LANGSMITH_PROJECT: "nexusiq"

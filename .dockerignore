@@ -1,8 +1,28 @@
+# Secrets and local environment
 .env
+.env.*
+!.env.example
+
+# VCS and Python environments/cache
 .git
-venv
 .venv
+venv
 __pycache__
+*.py[cod]
 .pytest_cache
+
+# Tests, reports, and local/runtime datasets
+tests
+evaluation/reports
 data/company.db
 data/chroma
+data/runtime
+
+# Editor and optional Chainlit assets
+.idea
+.vscode
+.chainlit
+chainlit.md
+
+# Deployment secrets
+k8s/secret.yaml

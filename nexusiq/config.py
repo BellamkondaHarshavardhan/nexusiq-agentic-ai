@@ -120,7 +120,7 @@ def get_settings() -> Settings:
     elif emb == "openai" and not openai_ready:
         emb = "offline"
 
-    data_dir = ROOT / "data"
+    data_dir = Path(_env("NEXUSIQ_DATA_DIR", str(ROOT / "data"))).expanduser()
     return Settings(
         llm_provider=llm,
         embedding_provider=emb,
@@ -139,7 +139,7 @@ def get_settings() -> Settings:
         sql_max_retries=_int("SQL_MAX_RETRIES", 2),
         critic_max_retries=_int("CRITIC_MAX_RETRIES", 1),
         data_dir=data_dir,
-        kb_dir=data_dir / "knowledge_base",
+        kb_dir=ROOT / "data" / "knowledge_base",
         db_path=data_dir / "company.db",
         vector_dir=data_dir / "chroma",
     )
